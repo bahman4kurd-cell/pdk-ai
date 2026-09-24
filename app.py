@@ -111,7 +111,6 @@ else:
             try:
               file_extension = uploaded_file.name.split(".")[-1].lower()
 
-              # ئەگەر فایلی PDF بوو بە پایتۆن دەیخوێنینەوە
               if file_extension == "pdf":
                 reader = pypdf.PdfReader(uploaded_file)
                 pdf_text = ""
@@ -121,7 +120,6 @@ else:
                     pdf_text += extracted + "\n"
                 final_content = pdf_text
               else:
-                # ئەگەر فایلی دەقی ئاسایی بوو
                 final_content = uploaded_file.read().decode("utf-8")
 
               if not title:
@@ -186,25 +184,43 @@ else:
     with st.chat_message("user"):
       st.markdown(prompt)
 
-    # وەڵامدانی زیرەکانە و گەڕان لە ناو داتای ئەدەمین یان فایلە ئەتاچکراوەکان
+    # وەڵامدانی زیرەکانە و گەڕانی پێشکەوتوو لە ناو ناوەڕۆکی فایلە PDFـەکاندا
     with st.chat_message("assistant"):
       prompt_lower = prompt.lower()
       custom_data = load_data()
 
-      matched_content = None
-      for item in custom_data:
-        if (
-            item["title"].lower() in prompt_lower
-            or prompt_lower in item["title"].lower()
-            or prompt_lower in item["content"].lower()
-        ):
-          matched_content = item["content"]
-          break
+      matched_contents = []
 
-      if matched_content:
+      # پشکنینی وشە بە وشە لەناو هەموو فایل و بابەتە پاشەکەوتکراوەکاندا
+      for item in custom_data:
+        title_lower = item.get("title", "").lower()
+        content_lower = item.get("content", "").lower()
+
+        # دابەشکردنی پرسیارەکە بۆ چەند وشەیەکی بچووک تاوەکو ئەگەر وشەیەکیشی تێدا بوو بدۆزرێتەوە
+        keywords = [
+            kw for kw in prompt_lower.split() if len(kw) > 2
+        ]  # تەنها وشە گەورەکان
+
+        found = False
+        # پشکنین ئایا ناونیشان یان ناوەڕۆکی فایلەکە وشەکان لەخۆ دەگرێت
+        if title_lower in prompt_lower or prompt_lower in title_lower:
+          found = True
+        else:
+          for kw in keywords:
+            if kw in content_lower:
+              found = True
+              break
+
+        if found:
+          matched_contents.append(
+              f"**بابەت: {item.get('title')}**\n{item.get('content')}"
+          )
+
+      if matched_contents:
+        # ئەگەر زانیاری لە فایلەکاندا دۆزرایەوە
         response = (
-            f"**زانیاری فەرمی لە فایل و بنکەی زانیاری ئەدەمینەوە:**\n\n"
-            f"{matched_content}"
+            "**دۆزرایەوە لە بنکەی زانیاری و فایلە ئەتاچکراوەکانی"
+            f" ئەدەمین:**\n\n{'\n\n---\n\n'.join(matched_contents)}"
         )
       elif "مێژوو" in prompt_lower or "دامەزراندن" in prompt_lower:
         response = (
@@ -220,9 +236,10 @@ else:
         )
       else:
         response = (
-            f"سوپاس بۆ پرسیارەکەت دەربارەی ({prompt}). ئەی ئایەکەی ئێمە لە"
-            " هەوڵی بەردەوامدایە بۆ پێشکەشکردنی وردترین زانیاری مێژوویی و"
-            " سازمانی دەربارەی پارتی."
+            f"سوپاس بۆ پرسیارەکەت دەربارەی ({prompt}). من وەک PDK AI"
+            " دەتوانم وەڵام بدەم، تکایە دڵنیابە لەوەی زانیارییەکە لە بەشی"
+            " ئەدەمین ئەتاچ کرابێت یان پرسیارەکەت لەسەر بنەمای"
+            " بابەتەکانبێت."
         )
 
       st.markdown(response)
