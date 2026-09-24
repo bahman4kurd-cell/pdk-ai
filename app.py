@@ -1,6 +1,5 @@
 import json
 import os
-import pdfplumber
 import streamlit as st
 
 # ڕێکخستنی پەڕە
@@ -89,15 +88,14 @@ else:
     if admin_pass == "1234":
       st.sidebar.success("بە سەرکەوتوویی چوویە ژوورەوە وەک ئەدەمین!")
 
-      st.sidebar.subheader("➕ زیادکردنی زانیاری (فایلی TXT یان دەق)")
+      st.sidebar.subheader("➕ زیادکردنی زانیاری بۆ بنکەی زانیاری")
       st.sidebar.info(
-          "💡 تێبینی: بۆ ئەوەی کێشەی تێکچوونی فۆنتت نەبێت، باشترە دەقەکان"
-          " بە شێوەی فایلی دەقی (.txt) یان ڕاستەوخۆ لێرە بنووسیت."
+          "💡 تێبینی: دەتوانیت دەق یان فایلی نوێ زیاد بکەیت بۆ ئەوەی زیرەکی"
+          " دەستکرد تەنها لە کاتی پێویستدا بەکاریان بهێنێت."
       )
 
       with st.sidebar.form("add_knowledge_form"):
         title = st.text_input("بابەت یان ناوی فایل:")
-
         uploaded_file = st.file_uploader(
             "فایلی دەقی ئەتاچ بکە (TXT یان MD)", type=["txt", "md"]
         )
@@ -121,9 +119,7 @@ else:
           if title and final_content:
             data.append({"title": title, "content": final_content})
             save_data(data)
-            st.sidebar.success(
-                "فایل یان زانیارییە نوێیەکە بە سەرکەوتوویی پاشەکەوت کرا!"
-            )
+            st.sidebar.success("بابەتەکە بە سەرکەوتوویی پاشەکەوت کرا!")
           else:
             st.sidebar.warning(
                 "تکایە ناونیشانێک و ناوەڕۆکێک یان فایلێک دابین بکە."
@@ -155,8 +151,8 @@ else:
             "role": "assistant",
             "content": (
                 f"سڵاو {st.session_state.user_email.split('@')[0]}! من PDK"
-                " AIـم. دەتوانیت هەر پرسیارێکت هەبێت لەسەر مێژوو،"
-                " کۆنگرەکان، یان ئۆرگانەکانی پارتی لێرە بپرسیت."
+                " AIـم. چۆن دەتوانم هاوکاریت بکەم لەسەر بنەمای ئەو"
+                " زانیارییانەی هەمە؟"
             ),
         }
     ]
@@ -174,59 +170,73 @@ else:
       prompt_lower = prompt.lower()
       custom_data = load_data()
 
+      # پەرەپێدانی میکانیزمی فلتەرکردنی زیرەک (Smart Search / Retrieval)
+      # بۆ ئەوەی تەنها بەشە پەیوەندیدارەکان بهێنێت نەک هەموو داتاکان بەیەکەوە
       matched_contents = []
-      keywords = [kw for kw in prompt_lower.split()]
+
+      # دابەشکردنی پرسیارەکە بۆ چەند وشەیەکی سەرەکی (Keywords)
+      query_words = [
+          w.strip()
+          for w in prompt_lower.split()
+          if len(w.strip()) > 2
+      ]  # فلتەرکردنی وشە کورتبووەکان
 
       for item in custom_data:
-        title_lower = item.get("title", "").lower()
-        content_lower = item.get("content", "").lower()
+        title = item.get("title", "")
+        content = item.get("content", "")
+        title_lower = title.lower()
+        content_lower = content.lower()
 
-        found = False
-        if (
-            any(kw in content_lower for kw in keywords if len(kw) > 1)
-            or title_lower in prompt_lower
-            or prompt_lower in title_lower
-        ):
-          found = True
+        # پشکنینی ئەوەی ئایا ناونیشانی بابەتەکە یان بەشێک لە پرسیارەکە لەناو ناوەڕۆکەکەدا هەیە
+        score = 0
+        if title_lower in prompt_lower or prompt_lower in title_lower:
+          score += 10
 
-        if found:
-          matched_contents.append(
-              f"**بابەت: {item.get('title')}**\n{item.get('content')}"
-          )
+        for word in query_words:
+          if word in content_lower:
+            score += 2  # پێدانی خاڵ بۆ هەر وشەیەکی هاوتا لە ناوەڕۆکدا
 
+        # ئەگەر ڕێژەی هاوتایی گونجاو بوو، تەنها ئەم بەشە دەستنیشان بکە
+        if score > 0:
+          matched_contents.append({
+              "title": title,
+              "content": content,
+              "score": score,
+          })
+
+      # ڕیزکردنی ئەنجامەکان بەپێی باشترین هاوتایی (Relevance Ranking)
+      matched_contents = sorted(
+          matched_contents, key=lambda x: x["score"], reverse=True
+      )
+
+      # دروستکردنی وەڵامی زیرەکانە وەک LLM (تەنها هێنانی زانیاری پەیوەندیدار)
       if matched_contents:
+        # تەنها باشترین ئەنجام یان دوو ئەنجامی یەکەم دەهێنێت کە زۆرترین پەیوەندییان هەیە
+        best_match = matched_contents[0]
         response = (
-            "**زانیاری دۆزراوە لە بنکەی زانیاری و فایلە"
-            f" ئەتاچکراوەکانەوە:**\n\n{'\n\n---\n\n'.join(matched_contents)}"
-        )
-      elif "مێژوو" in prompt_lower or "دامەزراندن" in prompt_lower:
-        response = (
-            "پارتی دیموکراتی کوردستان لە 16ـی ئابی 1946 بە سەرۆکایەتی نەمر مەلا"
-            " مستەفا بارزانی دامەزرا، وەک یەکەم حیزبی نیشتمانی خاوەن خەبات"
-            " لە مێژووی هاوچەرخی کوردستاندا."
-        )
-      elif "مەکتەبی سیاسی" in prompt_lower:
-        response = (
-            "مەکتەبی سیاسی یەکێکە لە ئۆرگانە باڵاکانی سەرکردایەتی پارتیدا کە لە"
-            " نێوان دوو کۆنگرەدا بەرپرسیارە لە جێبەجێکردنی بڕیارە سیاسی و"
-            " سازمانداییەکان."
+            f"📌 **لەبارەی ({best_match['title']}):**\n\n"
+            f"{best_match['content']}"
         )
       else:
-        if custom_data:
-          all_files_summary = []
-          for item in custom_data:
-            all_files_summary.append(
-                f"📁 **{item.get('title')}**:\n{item.get('content')}"
-            )
+        # وەڵامی بنەڕەتی ئەگەر لە زانیارییە تایبەتەکاندا نەبوو
+        if "مێژوو" in prompt_lower or "دامەزراندن" in prompt_lower:
           response = (
-              "من گەڕام، بەڵام هاوتایەکی تەواوم بۆ پرسیارەکەت نەتۆمارکرد."
-              " بەڵام ئەمانە ئەو فایل و زانیاریانەن کە ئێستا لە سیستەمەکەدا"
-              f" هەن:\n\n{'\n\n'.join(all_files_summary)}"
+              "پارتی دیموکراتی کوردستان لە 16ـی ئابی 1946 بە سەرۆکایەتی نەمر مەلا"
+              " مستەفا بارزانی دامەزرا، وەک یەکەم حیزبی نیشتمانی خاوەن خەبات"
+              " لە مێژووی هاوچەرخی کوردستاندا."
+          )
+        elif "مەکتەبی سیاسی" in prompt_lower:
+          response = (
+              "مەکتەبی سیاسی یەکێکە لە ئۆرگانە باڵاکانی سەرکردایەتی پارتیدا کە"
+              " لە نێوان دوو کۆنگرەدا بەرپرسیارە لە جێبەجێکردنی بڕیارە سیاسی"
+              " و سازمانداییەکان."
           )
         else:
           response = (
-              f"سوپاس بۆ پرسیارەکەت دەربارەی ({prompt}). هیچ فایل یان زانیارییەک"
-              " تا ئێستا لە بەشی ئەدەمین ئەتاچ نەکراوە."
+              f"سوپاس بۆ پرسیارەکەت. لەناو ئەو زانیاری و فایلانەی کە تۆمار"
+              f" کراون، هیچ زانیارییەکی ڕاستەوخۆ دەربارەی ({prompt}) نەدۆزراوەتەوە."
+              " دەتوانیت پرسیارەکەت بە شێوازێکی تر بپرسیت یان لە بەشی ئەدەمین"
+              " زانیاری زیاتر زیاد بکەیت."
           )
 
       st.markdown(response)
