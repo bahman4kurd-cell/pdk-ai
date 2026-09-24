@@ -2,7 +2,6 @@ import json
 import os
 import streamlit as st
 
-# هەوڵدانی هێنانی لایبرارییەی Groq بۆ خێراییەکی پێوانەیی لە DeepSeek و Llama
 try:
   from groq import Groq
 
@@ -10,7 +9,6 @@ try:
 except ImportError:
   GROQ_AVAILABLE = False
 
-# ڕێکخستنی پەڕە
 st.set_page_config(
     page_title="PDK AI - پلاتفۆرمی خێرای زیرەکی دەستکرد",
     page_icon="⚡",
@@ -92,13 +90,12 @@ else:
     if admin_pass == "1234":
       st.sidebar.success("بە سەرکەوتوویی چوویە ژوورەوە وەک ئەدەمین!")
 
-      # هەڵبژاردنی مۆدێل لەلایەن بەڕێوەبەرەوە
       st.sidebar.subheader("⚙️ هەڵبژاردنی مۆدێلی زیرەکی دەستکرد")
       selected_model = st.sidebar.selectbox(
           "مۆدێلی خێرا:",
           [
-              "deepseek-r1-distill-llama-70b",
               "llama-3.3-70b-versatile",
+              "llama-3.1-8b-instant",
               "mixtral-8x7b-32768",
           ],
       )
@@ -144,9 +141,7 @@ else:
       st.sidebar.warning("تکایە پاسوۆردی دروست بنووسە.")
 
   if "chosen_model" not in st.session_state:
-    st.session_state.chosen_model = (
-        "deepseek-r1-distill-llama-70b"  # مۆدێلی سەرەکی دیپ‌سیک
-    )
+    st.session_state.chosen_model = "llama-3.3-70b-versatile"
 
   st.sidebar.markdown("---")
   st.sidebar.title("زانیاری بەکارهێنەر")
@@ -163,8 +158,8 @@ else:
       unsafe_allow_html=True,
   )
   st.markdown(
-      '<p class="subtitle">سیستەمی خێرای ڕاوێژکاری بە بەکارهێنانی DeepSeek و'
-      " Llama</p>",
+      '<p class="subtitle">سیستەمی خێرای ڕاوێژکاری بە بەکارهێنانی Llama و'
+      " مۆدێلەکانی Groq</p>",
       unsafe_allow_html=True,
   )
 
@@ -189,69 +184,52 @@ else:
     with st.chat_message("user"):
       st.markdown(prompt)
 
-    with st.chat_message("خەریکی وەڵامدانەوەیە بە خێراییەکی بەرز..."):
-      custom_data = load_data()
-      response = ""
+    with st.chat_message("assistant"):
+      with st.spinner("خەریکی وەڵامدانەوەیە بە خێراییەکی بەرز..."):
+        custom_data = load_data()
+        response = ""
 
-      # کۆکردنەوەی ناوەڕۆکی فایلەکان وەک داتابەیس بۆ زیرەکی دەستکرد
-      context_text = ""
-      if custom_data:
-        for idx, item in enumerate(custom_data, 1):
-          context_text += (
-              f"\n--- سەرچاوە [{idx}]: {item.get('title')} ---\n"
-              f"{item.get('content')}\n"
-          )
-
-      system_prompt = (
-          "تۆ یاریدەدەرێکی زیرەکی دەستکردی زۆر خێرای. ئەرکی تۆ ئەوەیە کە بەپێی"
-          " ئەو زانیاری و فایلانەی خوارەوە، بە شێوازێکی زانستی و پوخت وەڵامی"
-          " پرسیاری بەکارهێنەر بدەیتەوە بە زمانی کوردی سۆرانی. ئەگەر وەڵامەکە"
-          " لە ناو داتاکاندا نەبوو، ڕاستەوخۆ پێی بڵێ کە لەو زانیارییانەدا"
-          " بوونی نییە.\n\n"
-          f"فایل و زانیارییە تۆمارکراوەکان:\n{context_text}"
-      )
-
-      # وەرگرتنی API Key لە Streamlit Secrets یان بە شێوازێکی پارێزراو
-      groq_api_key = os.environ.get("GROQ_API_KEY", "")
-      if "GROQ_API_KEY" in st.secrets:
-        groq_api_key = st.secrets["GROQ_API_KEY"]
-
-      if GROQ_AVAILABLE and groq_api_key:
-        try:
-          client = Groq(api_key=groq_api_key)
-          chat_completion = client.chat.completions.create(
-              messages=[
-                  {"role": "system", "content": system_prompt},
-                  {"role": "user", "content": prompt},
-              ],
-              model=st.session_state.chosen_model,
-              temperature=0.3,
-              max_tokens=1024,
-          )
-          response = chat_completion.choices[0].message.content
-        except Exception as e:
-          response = f"⚠️ هەڵە لە پەیوەندیکردن بە سرڤەری خێرا: {e}"
-
-      # ئەگەر ئەپەکە لایبرارییەی گروکی نەبوو یان API Key نەبوو، گەڕانی خێرای خۆکار بەکاربهێنە
-      if not response:
-        matched = False
+        context_text = ""
         if custom_data:
-          prompt_lower = prompt.lower()
-          for item in custom_data:
-            if any(
-                w in item.get("content", "").lower()
-                for w in prompt_lower.split()
-                if len(w) > 2
-            ):
-              response = f"📌 **{item.get('title')}**\n\n{item.get('content')}"
-              matched = True
-              break
+          for idx, item in enumerate(custom_data, 1):
+            context_text += (
+                f"\n--- سەرچاوە [{idx}]: {item.get('title')} ---\n"
+                f"{item.get('content')}\n"
+            )
 
-        if not matched:
+        system_prompt = (
+            "تۆ یاریدەدەرێکی زیرەکی دەستکردی زۆر خێرای. ئەرکی تۆ ئەوەیە کە بەپێی"
+            " ئەو زانیاری و فایلانەی خوارەوە، بە شێوازێکی زانستی و پوخت وەڵامی"
+            " پرسیاری بەکارهێنەر بدەیتەوە بە زمانی کوردی سۆرانی. ئەگەر وەڵامەکە"
+            " لە ناو داتاکاندا نەبوو، ڕاستەوخۆ پێی بڵێ کە لەو زانیارییانەدا"
+            " بوونی نییە.\n\n"
+            f"فایل و زانیارییە تۆمارکراوەکان:\n{context_text}"
+        )
+
+        groq_api_key = os.environ.get("GROQ_API_KEY", "")
+        if "GROQ_API_KEY" in st.secrets:
+          groq_api_key = st.secrets["GROQ_API_KEY"]
+
+        if GROQ_AVAILABLE and groq_api_key:
+          try:
+            client = Groq(api_key=groq_api_key)
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+                model=st.session_state.chosen_model,
+                temperature=0.3,
+                max_tokens=1024,
+            )
+            response = chat_completion.choices[0].message.content
+          except Exception as e:
+            response = f"⚠️ هەڵە لە پەیوەندیکردن بە سرڤەری خێرا: {e}"
+
+        if not response:
           response = (
               "سوپاس بۆ پرسیارەکەت. تکایە دڵنیابە لەوەی کە `GROQ_API_KEY`"
-              " لە بەشی Secretsی ستیریملیت داناوە بۆ ئەوەی مۆدێلی DeepSeek بە"
-              " خێرایی کار بکات."
+              " لە بەشی Secretsی ستیریملیت داناوە."
           )
 
       st.markdown(response)
