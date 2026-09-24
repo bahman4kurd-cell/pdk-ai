@@ -2,17 +2,19 @@ import json
 import os
 import streamlit as st
 
-# هەوڵدانی هێنانی لایبرارییەی Google Generative AI
+# هەوڵدانی هێنانی لایبرارییەی Groq بۆ خێراییەکی پێوانەیی لە DeepSeek و Llama
 try:
-  import google.generativeai as genai
+  from groq import Groq
 
-  AI_AVAILABLE = True
+  GROQ_AVAILABLE = True
 except ImportError:
-  AI_AVAILABLE = False
+  GROQ_AVAILABLE = False
 
 # ڕێکخستنی پەڕە
 st.set_page_config(
-    page_title="PDK AI - پلاتفۆرمی زیرەکی پارتی", page_icon="🟢", layout="centered"
+    page_title="PDK AI - پلاتفۆرمی خێرای زیرەکی دەستکرد",
+    page_icon="⚡",
+    layout="centered",
 )
 
 DATA_FILE = "pdk_knowledge.json"
@@ -90,7 +92,19 @@ else:
     if admin_pass == "1234":
       st.sidebar.success("بە سەرکەوتوویی چوویە ژوورەوە وەک ئەدەمین!")
 
-      st.sidebar.subheader("➕ زیادکردنی زانیاری بۆ بنکەی زانیاری AI")
+      # هەڵبژاردنی مۆدێل لەلایەن بەڕێوەبەرەوە
+      st.sidebar.subheader("⚙️ هەڵبژاردنی مۆدێلی زیرەکی دەستکرد")
+      selected_model = st.sidebar.selectbox(
+          "مۆدێلی خێرا:",
+          [
+              "deepseek-r1-distill-llama-70b",
+              "llama-3.3-70b-versatile",
+              "mixtral-8x7b-32768",
+          ],
+      )
+      st.session_state.chosen_model = selected_model
+
+      st.sidebar.subheader("➕ زیادکردنی زانیاری خێرا")
       with st.sidebar.form("add_knowledge_form"):
         title = st.text_input("ناونیشانی بابەت (ئارەزوومەند):")
         uploaded_file = st.file_uploader(
@@ -129,21 +143,28 @@ else:
     else:
       st.sidebar.warning("تکایە پاسوۆردی دروست بنووسە.")
 
+  if "chosen_model" not in st.session_state:
+    st.session_state.chosen_model = (
+        "deepseek-r1-distill-llama-70b"  # مۆدێلی سەرەکی دیپ‌سیک
+    )
+
   st.sidebar.markdown("---")
   st.sidebar.title("زانیاری بەکارهێنەر")
   st.sidebar.write("👤 بەخێر هاتیت:")
   st.sidebar.code(st.session_state.user_email)
+  st.sidebar.info(f"مۆدێلی کارا: {st.session_state.chosen_model}")
 
   if st.sidebar.button("دەرچوون (Logout)"):
     st.session_state.logged_in = False
     st.rerun()
 
   st.markdown(
-      '<p class="main-title">PDK AI Assistant</p>', unsafe_allow_html=True
+      '<p class="main-title">PDK AI Assistant (Ultra Fast)</p>',
+      unsafe_allow_html=True,
   )
   st.markdown(
-      '<p class="subtitle">سیستەمی زیرەکی دەستکردی پێشکەوتوو بۆ لێکۆڵینەوە و'
-      " وەڵامدانەوە</p>",
+      '<p class="subtitle">سیستەمی خێرای ڕاوێژکاری بە بەکارهێنانی DeepSeek و'
+      " Llama</p>",
       unsafe_allow_html=True,
   )
 
@@ -152,10 +173,9 @@ else:
         {
             "role": "assistant",
             "content": (
-                f"سڵاو {st.session_state.user_email.split('@')[0]}! من PDK"
-                " AIـم. هەر پرسیارێکت هەبێت لەسەر ئەو زانیاری و فایلانەی کە"
-                " ئەپلۆد کراون، دەتوانیت بە ئازادی بینوسیت و من لێکدانەوەی"
-                " بۆ دەکەم."
+                f"سڵاو {st.session_state.user_email.split('@')[0]}! من"
+                " ئامادەم بە خێراییەکی پێوانەیی وەڵامی پرسیارەکانت بدەمەوە"
+                " لەسەر بنەمای فایله تۆمارکراوەکان."
             ),
         }
     ]
@@ -169,66 +189,70 @@ else:
     with st.chat_message("user"):
       st.markdown(prompt)
 
-    with st.chat_message("assistant"):
-      with st.spinner("زیرەکی دەستکرد خەریکی شیکردنەوە و گەڕانە..."):
-        custom_data = load_data()
-        response = ""
+    with st.chat_message("خەریکی وەڵامدانەوەیە بە خێراییەکی بەرز..."):
+      custom_data = load_data()
+      response = ""
 
-        # ئەگەر لایبرارییەکە هەبوو و API Keyـیش بوونی هەبوو
-        if AI_AVAILABLE and custom_data:
-          context_text = ""
-          for idx, item in enumerate(custom_data, 1):
-            context_text += (
-                f"\n--- سەرچاوە [{idx}]: {item.get('title')} ---\n"
-                f"{item.get('content')}\n"
-            )
-
-          system_instruction = (
-              "تۆ زیرەکی دەستکردێکی پسپۆڕی. ئەرکی تۆ ئەوەیە کە وەڵامی پرسیاری"
-              " بەکارهێنەر بدەیتەوە تەنها و تەنها لەسەر بنەمای ئەو سەرچاوە و"
-              " زانیارییانەی خوارەوە کە لەلایەن بەڕێوەبەرەوە ئەپلۆد کراون. ئەگەر"
-              " وەڵامەکە لە ناو زانیارییەکاندا نەبوو، بە ڕوونی پێی بڵێ کە لە"
-              " داتاکاندا بوونی نییە، وەڵامەکانت بە زمانی کوردی سۆرانی پوخت"
-              " بنووسە.\n\n"
-              f"زانیاری و فایلە ئەپلۆدکراوەکان:\n{context_text}"
+      # کۆکردنەوەی ناوەڕۆکی فایلەکان وەک داتابەیس بۆ زیرەکی دەستکرد
+      context_text = ""
+      if custom_data:
+        for idx, item in enumerate(custom_data, 1):
+          context_text += (
+              f"\n--- سەرچاوە [{idx}]: {item.get('title')} ---\n"
+              f"{item.get('content')}\n"
           )
 
-          try:
-            # ئەگەر مۆدێلەکەی کار پێکرد
-            model = genai.GenerativeModel(
-                model_name="gemini-1.5-flash",
-                system_instruction=system_instruction,
-            )
-            chat = model.start_chat(history=[])
-            ai_response = chat.send_message(prompt)
-            response = ai_response.text
-          except Exception:
-            response = ""
+      system_prompt = (
+          "تۆ یاریدەدەرێکی زیرەکی دەستکردی زۆر خێرای. ئەرکی تۆ ئەوەیە کە بەپێی"
+          " ئەو زانیاری و فایلانەی خوارەوە، بە شێوازێکی زانستی و پوخت وەڵامی"
+          " پرسیاری بەکارهێنەر بدەیتەوە بە زمانی کوردی سۆرانی. ئەگەر وەڵامەکە"
+          " لە ناو داتاکاندا نەبوو، ڕاستەوخۆ پێی بڵێ کە لەو زانیارییانەدا"
+          " بوونی نییە.\n\n"
+          f"فایل و زانیارییە تۆمارکراوەکان:\n{context_text}"
+      )
 
-        # ئەگەر AI بەردەست نەبوو یان API Key نەبوو، گەڕانی زیرەک بەکاربهێنە وەکو فۆڵباک
-        if not response:
-          matched = False
-          if custom_data:
-            prompt_lower = prompt.lower()
-            for item in custom_data:
-              # گەڕانی سادەی ورد لەناو دەقەکاندا بۆ دڵنیابوون لە وەڵام
-              if any(
-                  w in item.get("content", "").lower()
-                  for w in prompt_lower.split()
-                  if len(w) > 2
-              ):
-                response = (
-                    f"📌 **{item.get('title')}**\n\n{item.get('content')}"
-                )
-                matched = True
-                break
+      # وەرگرتنی API Key لە Streamlit Secrets یان بە شێوازێکی پارێزراو
+      groq_api_key = os.environ.get("GROQ_API_KEY", "")
+      if "GROQ_API_KEY" in st.secrets:
+        groq_api_key = st.secrets["GROQ_API_KEY"]
 
-          if not matched:
-            response = (
-                "سوپاس بۆ پرسیارەکەت. لەناو داتاکاندا زانیاری پێویست نەدۆزراوەتەوە"
-                " یان پێویستە فایلی `requirements.txt` ڕێکبخەیت بۆ کارپێکردنی"
-                " تەواوی AI."
-            )
+      if GROQ_AVAILABLE and groq_api_key:
+        try:
+          client = Groq(api_key=groq_api_key)
+          chat_completion = client.chat.completions.create(
+              messages=[
+                  {"role": "system", "content": system_prompt},
+                  {"role": "user", "content": prompt},
+              ],
+              model=st.session_state.chosen_model,
+              temperature=0.3,
+              max_tokens=1024,
+          )
+          response = chat_completion.choices[0].message.content
+        except Exception as e:
+          response = f"⚠️ هەڵە لە پەیوەندیکردن بە سرڤەری خێرا: {e}"
+
+      # ئەگەر ئەپەکە لایبرارییەی گروکی نەبوو یان API Key نەبوو، گەڕانی خێرای خۆکار بەکاربهێنە
+      if not response:
+        matched = False
+        if custom_data:
+          prompt_lower = prompt.lower()
+          for item in custom_data:
+            if any(
+                w in item.get("content", "").lower()
+                for w in prompt_lower.split()
+                if len(w) > 2
+            ):
+              response = f"📌 **{item.get('title')}**\n\n{item.get('content')}"
+              matched = True
+              break
+
+        if not matched:
+          response = (
+              "سوپاس بۆ پرسیارەکەت. تکایە دڵنیابە لەوەی کە `GROQ_API_KEY`"
+              " لە بەشی Secretsی ستیریملیت داناوە بۆ ئەوەی مۆدێلی DeepSeek بە"
+              " خێرایی کار بکات."
+          )
 
       st.markdown(response)
       st.session_state.messages.append(
