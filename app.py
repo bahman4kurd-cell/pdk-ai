@@ -1,6 +1,6 @@
 import json
 import os
-import pypdf
+import pdfplumber
 import streamlit as st
 
 # ڕێکخستنی پەڕە
@@ -112,13 +112,14 @@ else:
               file_extension = uploaded_file.name.split(".")[-1].lower()
 
               if file_extension == "pdf":
-                reader = pypdf.PdfReader(uploaded_file)
-                pdf_text = ""
-                for page in reader.pages:
-                  extracted = page.extract_text()
-                  if extracted:
-                    pdf_text += extracted + "\n"
-                final_content = pdf_text
+                # بەکارهێنانی pdfplumber بۆ خوێندنەوەی دەقی ناو پی دی ئێف
+                with pdfplumber.open(uploaded_file) as pdf:
+                  pdf_text = ""
+                  for page in pdf.pages:
+                    extracted = page.extract_text()
+                    if extracted:
+                      pdf_text += extracted + "\n"
+                  final_content = pdf_text
               else:
                 final_content = uploaded_file.read().decode("utf-8")
 
@@ -184,14 +185,12 @@ else:
     with st.chat_message("user"):
       st.markdown(prompt)
 
-    # وەڵامدانی زیرەکانە و گەڕانی پێشکەوتوو و کراوە لە ناو ناوەڕۆکی فایلەکاندا
+    # وەڵامدانی زیرەکانە و گەڕانی گشتگیر لە ناو فایلەکاندا
     with st.chat_message("assistant"):
       prompt_lower = prompt.lower()
       custom_data = load_data()
 
       matched_contents = []
-
-      # گەڕانی گشتگیر بەبێ مەرجی درێژی وشەکان (بۆ ئەوەی ژمارە و پیتە کورتەکانیش بگرێتەوە)
       keywords = [kw for kw in prompt_lower.split()]
 
       for item in custom_data:
@@ -199,7 +198,6 @@ else:
         content_lower = item.get("content", "").lower()
 
         found = False
-        # پشکنین ئەگەر بەشێک لە ناونیشان یان ناوەڕۆک لە پرسیارەکەدا هەبێت، یان بەپێچەوانەوە
         if (
             any(kw in content_lower for kw in keywords if len(kw) > 1)
             or title_lower in prompt_lower
@@ -230,7 +228,6 @@ else:
             " سازمانداییەکان."
         )
       else:
-        # ئەگەر هیچیش نەدۆزرایەوە، بۆ ئەوەی دڵنیا ببی لەوەی فایلەکان هەن، هەموو ناوەڕۆکی فایلی ئەتاچکراو نیشان دەدات
         if custom_data:
           all_files_summary = []
           for item in custom_data:
