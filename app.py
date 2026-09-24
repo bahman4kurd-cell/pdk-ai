@@ -86,21 +86,22 @@ else:
 
   if admin_mode:
     admin_pass = st.sidebar.text_input("پاسوۆردی ئەدەمین:", type="password")
-    if admin_pass == "1234":  # لێرە دەتوانیت پاسوۆردی خۆت بگۆڕیت
+    if admin_pass == "1234":
       st.sidebar.success("بە سەرکەوتوویی چوویە ژوورەوە وەک ئەدەمین!")
 
-      st.sidebar.subheader("➕ زیادکردنی زانیاری یان فایلی نوێ (PDF / TXT)")
+      st.sidebar.subheader("➕ زیادکردنی زانیاری (فایلی TXT یان دەق)")
+      st.sidebar.info(
+          "💡 تێبینی: بۆ ئەوەی کێشەی تێکچوونی فۆنتت نەبێت، باشترە دەقەکان"
+          " بە شێوەی فایلی دەقی (.txt) یان ڕاستەوخۆ لێرە بنووسیت."
+      )
+
       with st.sidebar.form("add_knowledge_form"):
         title = st.text_input("بابەت یان ناوی فایل:")
 
-        # بەشی ئەتاچکردنی فایل (پشتیوانی PDF و TXT دەکات)
         uploaded_file = st.file_uploader(
-            "فایل ئەتاچ بکە (PDF یان TXT)", type=["pdf", "txt", "md"]
+            "فایلی دەقی ئەتاچ بکە (TXT یان MD)", type=["txt", "md"]
         )
-
-        content_manual = st.text_area(
-            "یان دەق لێرە بنووسە (ئەگەر فایل نەبوو):"
-        )
+        content_manual = st.text_area("یان دەق لێرە بنووسە:")
         submitted = st.form_submit_button("پاشەکەوتکردن لە سیستەم")
 
         if submitted:
@@ -109,20 +110,7 @@ else:
 
           if uploaded_file is not None:
             try:
-              file_extension = uploaded_file.name.split(".")[-1].lower()
-
-              if file_extension == "pdf":
-                # بەکارهێنانی pdfplumber بۆ خوێندنەوەی دەقی ناو پی دی ئێف
-                with pdfplumber.open(uploaded_file) as pdf:
-                  pdf_text = ""
-                  for page in pdf.pages:
-                    extracted = page.extract_text()
-                    if extracted:
-                      pdf_text += extracted + "\n"
-                  final_content = pdf_text
-              else:
-                final_content = uploaded_file.read().decode("utf-8")
-
+              final_content = uploaded_file.read().decode("utf-8")
               if not title:
                 title = uploaded_file.name
             except Exception as e:
@@ -161,7 +149,6 @@ else:
       unsafe_allow_html=True,
   )
 
-  # پاشەکەوتکردنی مێژووی چات
   if "messages" not in st.session_state:
     st.session_state.messages = [
         {
@@ -174,18 +161,15 @@ else:
         }
     ]
 
-  # نیشاندانی نامەکانی پێشوو
   for message in st.session_state.messages:
     with st.chat_message(message["role"]):
       st.markdown(message["content"])
 
-  # وەگرتنی پرسیار لە بەکارهێنەر
   if prompt := st.chat_input("لێرە پرسیارەکەت بنووسە..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
       st.markdown(prompt)
 
-    # وەڵامدانی زیرەکانە و گەڕانی گشتگیر لە ناو فایلەکاندا
     with st.chat_message("assistant"):
       prompt_lower = prompt.lower()
       custom_data = load_data()
