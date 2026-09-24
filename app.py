@@ -94,8 +94,8 @@ else:
       selected_model = st.sidebar.selectbox(
           "مۆدێلی کارا:",
           [
-              "llama-3.3-70b-versatile",
               "llama-3.1-8b-instant",
+              "llama-3.2-3b-preview",
               "mixtral-8x7b-32768",
           ],
       )
@@ -141,7 +141,7 @@ else:
       st.sidebar.warning("تکایە پاسوۆردی دروست بنووسە.")
 
   if "chosen_model" not in st.session_state:
-    st.session_state.chosen_model = "llama-3.3-70b-versatile"
+    st.session_state.chosen_model = "llama-3.1-8b-instant"
 
   st.sidebar.markdown("---")
   st.sidebar.title("زانیاری بەکارهێنەر")
@@ -185,9 +185,7 @@ else:
       st.markdown(prompt)
 
     with st.chat_message("assistant"):
-      with st.spinner(
-          "خەریکی شیکردنەوەی قوڵ و وەڵامدانەوەیە بە خێراییەکی بەرز..."
-      ):
+      with st.spinner("خەریکی وەڵامدانەوەیە بە خێراییەکی بەرز..."):
         custom_data = load_data()
         response = ""
 
@@ -200,9 +198,8 @@ else:
             )
 
         system_prompt = (
-            "تۆ یاریدەدەرێکی زیرەکی دەستکردی زۆر خێرا و پێشکەوتووی. ئەرکی تۆ"
-            " ئەوەیە کە بە وردی و قوڵییەوە بیر بکەیتەوە و بەپێی ئەو زانیاری و"
-            " فایلانەی خوارەوە، بە شێوازێکی زانستی، ڕیشەیی و پوخت وەڵامی"
+            "تۆ یاریدەدەرێکی زیرەکی دەستکردی زۆر خێرای. ئەرکی تۆ ئەوەیە کە بەپێی"
+            " ئەو زانیاری و فایلانەی خوارەوە، بە شێوازێکی زانستی و پوخت وەڵامی"
             " پرسیاری بەکارهێنەر بدەیتەوە بە زمانی کوردی سۆرانی. ئەگەر وەڵامەکە"
             " لە ناو داتاکاندا نەبوو، ڕاستەوخۆ پێی بڵێ کە لەو زانیارییانەدا"
             " بوونی نییە.\n\n"
@@ -216,16 +213,35 @@ else:
         if GROQ_AVAILABLE and groq_api_key:
           try:
             client = Groq(api_key=groq_api_key)
-            chat_completion = client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt},
-                ],
-                model=st.session_state.chosen_model,
-                temperature=0.2,
-                max_tokens=2048,
-            )
-            response = chat_completion.choices[0].message.content
+            # تاقیکردنەوەی مۆدێلی هەڵبژێردراو، خۆ ئەگەر هەڵەی هەبوو مۆدێلی تریش تاقی دەکاتەوە
+            models_to_try = [
+                st.session_state.chosen_model,
+                "llama-3.1-8b-instant",
+                "llama-3.2-3b-preview",
+            ]
+            success = False
+            for m in models_to_try:
+              try:
+                chat_completion = client.chat.completions.create(
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt},
+                    ],
+                    model=m,
+                    temperature=0.3,
+                    max_tokens=1024,
+                )
+                response = chat_completion.choices[0].message.content
+                success = True
+                break
+              except Exception:
+                continue
+
+            if not success:
+              response = (
+                  "⚠️ هەڵە: هیچ کام لە مۆدێلەکانی گروق بەردەست نەبوون یان کلیلەکەت"
+                  " کێشەی هەیە."
+              )
           except Exception as e:
             response = f"⚠️ هەڵە لە پەیوەندیکردن بە سرڤەری خێرا: {e}"
 
