@@ -1,6 +1,7 @@
 import json
 import os
 import streamlit as st
+import google.generativeai as genai
 
 # ڕێکخستنی پەڕە
 st.set_page_config(
@@ -9,6 +10,9 @@ st.set_page_config(
 
 # ناوی فایلی پاشەکەوتکردنی زانیارییەکان
 DATA_FILE = "pdk_knowledge.json"
+
+# [تێبینی] ئەگەر لەگەڵ API Key کاری دەکەیت، دەتوانیت لێرە دایبنێیت یان لە Streamlit Secrets بیخوێنیتەوە:
+# genai.configure(api_key=st.secrets.get("GEMINI_API_KEY", "YOUR_API_KEY"))
 
 
 # خوێندنەوەی داتاکان
@@ -88,16 +92,14 @@ else:
     if admin_pass == "1234":
       st.sidebar.success("بە سەرکەوتوویی چوویە ژوورەوە وەک ئەدەمین!")
 
-      st.sidebar.subheader("➕ زیادکردنی زانیاری بۆ بنکەی زانیاری")
+      st.sidebar.subheader("➕ زیادکردنی زانیاری بۆ بنکەی زانیاری AI")
       st.sidebar.info(
-          "💡 تێبینی: ئەگەر ناوی بابەتت نەنووسین، سیستەمەکە خۆکارانە دەیگجێڕێت"
-          " و دەیبەسێتەوە بە پرسیاری بەکارهێنەرەوە."
+          "💡 هەرچەندە زانیاری لێرە دابنێیت، زیرەکی دەستکرد بە تێگەیشتنی"
+          " زمانی سروشتی دەیانناسێتەوە بێ پێویست بوون بە ناونیشانی ورد."
       )
 
       with st.sidebar.form("add_knowledge_form"):
-        title = st.text_input(
-            "بابەت یان ناوی فایل (ئارەزوومەند - Optional):"
-        )
+        title = st.text_input("ناونیشانی بابەت (ئارەزوومەند):")
         uploaded_file = st.file_uploader(
             "فایلی دەقی ئەتاچ بکە (TXT یان MD)", type=["txt", "md"]
         )
@@ -118,7 +120,6 @@ else:
           else:
             final_content = content_manual
 
-          # ئەگەر ناو نەبوو، یەکەم ڕستەی ناوەڕۆکەکە بکە بە ناونیشان
           if not title and final_content:
             title = (
                 final_content.split("\n")[0][:30] + "..."
@@ -148,8 +149,8 @@ else:
       '<p class="main-title">PDK AI Assistant</p>', unsafe_allow_html=True
   )
   st.markdown(
-      '<p class="subtitle">ئەم ئەی ئایە تایبەتە بە مێژوو و پێکهاتەی'
-      " ڕێکخراوەیی پارتی دیموکراتی کوردستان</p>",
+      '<p class="subtitle">سیستەمی زیرەکی دەستکردی پێشکەوتوو بۆ لێکۆڵینەوە و'
+      " وەڵامدانەوە</p>",
       unsafe_allow_html=True,
   )
 
@@ -159,8 +160,9 @@ else:
             "role": "assistant",
             "content": (
                 f"سڵاو {st.session_state.user_email.split('@')[0]}! من PDK"
-                " AIـم. چۆن دەتوانم هاوکاریت بکەم لەسەر بنەمای ئەو"
-                " زانیارییانەی هەمە؟"
+                " AIـم. هەر پرسیارێکت هەبێت لەسەر ئەو زانیاری و فایلانەی کە"
+                " ئەپلۆد کراون، دەتوانیت بە ئازادی بینوسیت و من لێکدانەوەی"
+                " بۆ دەکەم."
             ),
         }
     ]
@@ -175,74 +177,54 @@ else:
       st.markdown(prompt)
 
     with st.chat_message("assistant"):
-      prompt_lower = prompt.lower()
-      custom_data = load_data()
+      with st.spinner("زیرەکی دەستکرد خەریکی شیکردنەوە و گەڕانە..."):
+        custom_data = load_data()
 
-      # پەرەپێدانی گەڕانی زیرەک (Semantic Keyword Matching لە ناوەڕۆکدا)
-      scored_matches = []
-
-      # جیاکردنەوەی وشە سەرەکییەکانی پرسیارەکە (فلتەرکردنی پیتە کورتەکان)
-      query_words = [
-          w.strip() for w in prompt_lower.split() if len(w.strip()) > 1
-      ]
-
-      for item in custom_data:
-        title = item.get("title", "")
-        content = item.get("content", "")
-        content_lower = content.lower()
-        title_lower = title.lower()
-
-        match_score = 0
-
-        # پشکنینی وشەکان لەناو ناوەڕۆکەکەدا (Body Content)
-        for word in query_words:
-          if word in content_lower:
-            match_score += (
-                3  # پێدانی کێش (Weight) بەهێزتر بە بوونی وشەکان لە ناوەڕۆکدا
+        # کۆکردنەوەی تەواوی زانیارییەکانی بنکەی زانیاری بۆ ئەوەی AI وەک Context تێیان بگات
+        context_text = ""
+        if custom_data:
+          for idx, item in enumerate(custom_data, 1):
+            context_text += (
+                f"\n--- سەرچاوە [{idx}]: {item.get('title')} ---\n"
+                f"{item.get('content')}\n"
             )
 
-        # پشکنین لە ناونیشانیشدا
-        for word in query_words:
-          if word in title_lower:
-            match_score += 5
+        # دروستکردنی پرۆمپتی زیرەک بۆ مۆدێلی AI
+        system_instruction = (
+            "تۆ زیرەکی دەستکردێکی پسپۆڕی. ئەرکی تۆ ئەوەیە کە وەڵامی پرسیاری"
+            " بەکارهێنەر بدەیتەوە تەنها و تەنها لەسەر بنەمای ئەو سەرچاوە و"
+            " زانیارییانەی خوارەوە کە لەلایەن بەڕێوەبەرەوە ئەپلۆد کراون. ئەگەر"
+            " وەڵامەکە لە ناو زانیارییەکاندا نەبوو، بە ڕوونی پێی بڵێ کە لە"
+            " داتاکاندا بوونی نییە، وەڵامەکانت بە زمانی کوردی سۆرانی شیرین"
+            " و پوخت بنووسە.\n\n"
+            f"زانیاری و فایلە ئەپلۆدکراوەکان:\n{context_text}"
+        )
 
-        if match_score > 0:
-          scored_matches.append({
-              "title": title,
-              "content": content,
-              "score": match_score,
-          })
+        try:
+          # بەکارهێنانی مۆدێلی گونجاوی Gemini بۆ وەڵامدانەوەی لۆژیکی
+          model = genai.GenerativeModel(
+              model_name="gemini-1.5-flash",
+              system_instruction=system_instruction,
+          )
 
-      # ڕیزکردنی ئەنجامەکان بەپێی زۆرترین خاڵی هاوتایی
-      scored_matches = sorted(
-          scored_matches, key=lambda x: x["score"], reverse=True
-      )
+          # دروستکردنی چاوپێکەوتن یان ناردنی نامەکە
+          chat = model.start_chat(history=[])
+          ai_response = chat.send_message(prompt)
+          response = ai_response.text
 
-      # دروستکردنی وەڵامی زیرەکانە
-      if scored_matches:
-        # تەنها باشترین و پەیوەندیدارترین ناوەڕۆک دەهێنێت
-        best_match = scored_matches[0]
-        response = f"📌 **{best_match['title']}**\n\n{best_match['content']}"
-      else:
-        # پشکنینی بنەڕەتی بۆ وەڵامە ئاساییەکان
-        if "مێژوو" in prompt_lower or "دامەزراندن" in prompt_lower:
-          response = (
-              "پارتی دیموکراتی کوردستان لە 16ـی ئابی 1946 بە سەرۆکایەتی نەمر مەلا"
-              " مستەفا بارزانی دامەزرا، وەک یەکەم حیزبی نیشتمانی خاوەن خەبات"
-              " لە مێژووی هاوچەرخی کوردستاندا."
-          )
-        elif "مەکتەبی سیاسی" in prompt_lower:
-          response = (
-              "مەکتەبی سیاسی یەکێکە لە ئۆرگانە باڵاکانی سەرکردایەتی پارتیدا کە"
-              " لە نێوان دوو کۆنگرەدا بەرپرسیارە لە جێبەجێکردنی بڕیارە سیاسی"
-              " و سازمانداییەکان."
-          )
-        else:
-          response = (
-              f"سوپاس بۆ پرسیارەکەت. لەناو ئەو زانیارییانەی کە تۆمار"
-              f" کراون، هیچ زانیارییەک نەدۆزراوەتەوە کە هاوتا بێت لەگەڵ"
-              f" ({prompt})."
-          )
+        except Exception as e:
+          # فۆڵباک (Fallback) لە حالەتی نەبوونی ئینتەرنێت یان کێشەی API Key
+          if custom_data:
+            response = (
+                "⚠️ (تێبینی: پەیوەندی بە مۆدێلی سەرەکی AIـەوە نەکرا، بەڵام"
+                " ئەمە ناوەڕۆکی فایلەکانتە):\n\n"
+                + custom_data[-1]["content"]
+            )
+          else:
+            response = (
+                "سوپاس بۆ پرسیارەکەت. تکایە دڵنیابە لەوەی کە API Key ڕێکخراوە"
+                " یان زانیاریت لە بەشی ئەدەمین زیاد کردووە."
+            )
 
       st.markdown(response)
       st.session_state.messages.append(
