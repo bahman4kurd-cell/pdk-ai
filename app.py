@@ -94,8 +94,8 @@ else:
       selected_model = st.sidebar.selectbox(
           "مۆدێلی خێرا:",
           [
-              "llama-3.3-70b-versatile",
               "llama-3.1-8b-instant",
+              "llama-3.2-3b-preview",
               "mixtral-8x7b-32768",
           ],
       )
@@ -141,7 +141,7 @@ else:
       st.sidebar.warning("تکایە پاسوۆردی دروست بنووسە.")
 
   if "chosen_model" not in st.session_state:
-    st.session_state.chosen_model = "llama-3.3-70b-versatile"
+    st.session_state.chosen_model = "llama-3.1-8b-instant"
 
   st.sidebar.markdown("---")
   st.sidebar.title("زانیاری بەکارهێنەر")
