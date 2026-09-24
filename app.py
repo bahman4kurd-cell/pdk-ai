@@ -1,5 +1,6 @@
 import json
 import os
+import pypdf
 import streamlit as st
 
 # ڕێکخستنی پەڕە
@@ -88,13 +89,13 @@ else:
     if admin_pass == "1234":  # لێرە دەتوانیت پاسوۆردی خۆت بگۆڕیت
       st.sidebar.success("بە سەرکەوتوویی چوویە ژوورەوە وەک ئەدەمین!")
 
-      st.sidebar.subheader("➕ زیادکردنی زانیاری یان فایلی نوێ")
+      st.sidebar.subheader("➕ زیادکردنی زانیاری یان فایلی نوێ (PDF / TXT)")
       with st.sidebar.form("add_knowledge_form"):
-        title = st.text_input("بابەت یان ناوی فای:")
+        title = st.text_input("بابەت یان ناوی فایل:")
 
-        # بەشی ئەتاچکردنی فایل (بۆ نموونە فایلی دەقی TXT یان زانیاری)
+        # بەشی ئەتاچکردنی فایل (پشتیوانی PDF و TXT دەکات)
         uploaded_file = st.file_uploader(
-            "فایل ئەتاچ بکە (TXT)", type=["txt", "md"]
+            "فایل ئەتاچ بکە (PDF یان TXT)", type=["pdf", "txt", "md"]
         )
 
         content_manual = st.text_area(
@@ -106,11 +107,23 @@ else:
           data = load_data()
           final_content = ""
 
-          # ئەگەر ئەدەمین فایل بەتاچ کردبوو، ناوەڕۆکەکەی دەخوێنینەوە
           if uploaded_file is not None:
             try:
-              text_data = uploaded_file.read().decode("utf-8")
-              final_content = text_data
+              file_extension = uploaded_file.name.split(".")[-1].lower()
+
+              # ئەگەر فایلی PDF بوو بە پایتۆن دەیخوێنینەوە
+              if file_extension == "pdf":
+                reader = pypdf.PdfReader(uploaded_file)
+                pdf_text = ""
+                for page in reader.pages:
+                  extracted = page.extract_text()
+                  if extracted:
+                    pdf_text += extracted + "\n"
+                final_content = pdf_text
+              else:
+                # ئەگەر فایلی دەقی ئاسایی بوو
+                final_content = uploaded_file.read().decode("utf-8")
+
               if not title:
                 title = uploaded_file.name
             except Exception as e:
@@ -122,7 +135,7 @@ else:
             data.append({"title": title, "content": final_content})
             save_data(data)
             st.sidebar.success(
-                "زانیاری یان فایلی ئەتاچکراو بە سەرکەوتوویی پاشەکەوت کرا!"
+                "فایل یان زانیارییە نوێیەکە بە سەرکەوتوویی پاشەکەوت کرا!"
             )
           else:
             st.sidebar.warning(
