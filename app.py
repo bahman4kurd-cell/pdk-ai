@@ -1,21 +1,23 @@
 import json
 import os
 import streamlit as st
-import google.generativeai as genai
+
+# هەوڵدانی هێنانی لایبرارییەی Google Generative AI
+try:
+  import google.generativeai as genai
+
+  AI_AVAILABLE = True
+except ImportError:
+  AI_AVAILABLE = False
 
 # ڕێکخستنی پەڕە
 st.set_page_config(
     page_title="PDK AI - پلاتفۆرمی زیرەکی پارتی", page_icon="🟢", layout="centered"
 )
 
-# ناوی فایلی پاشەکەوتکردنی زانیارییەکان
 DATA_FILE = "pdk_knowledge.json"
 
-# [تێبینی] ئەگەر لەگەڵ API Key کاری دەکەیت، دەتوانیت لێرە دایبنێیت یان لە Streamlit Secrets بیخوێنیتەوە:
-# genai.configure(api_key=st.secrets.get("GEMINI_API_KEY", "YOUR_API_KEY"))
 
-
-# خوێندنەوەی داتاکان
 def load_data():
   if os.path.exists(DATA_FILE):
     with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -23,13 +25,11 @@ def load_data():
   return []
 
 
-# پاشەکەوتکردنی داتای نوێ لەلایەن ئەدەمینەوە
 def save_data(data_list):
   with open(DATA_FILE, "w", encoding="utf-8") as f:
     json.dump(data_list, f, ensure_ascii=False, indent=4)
 
 
-# ڕووکاری سەرەکی (CSS Styling)
 st.markdown(
     """
     <style>
@@ -53,7 +53,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# سیستەمی چوونەژوورەوەی سادە بۆ پاراستنی ئەپەکە
 if "logged_in" not in st.session_state:
   st.session_state.logged_in = False
 
@@ -83,7 +82,6 @@ if not st.session_state.logged_in:
         st.error("تکایە ئیمەیڵ و پاسوۆرد بە دروستی بنووسە!")
 
 else:
-  # پەنڵی ئەدەمین لە Sidebar
   st.sidebar.title("🎛️ کۆنترۆڵی ئەدەمین")
   admin_mode = st.sidebar.checkbox("دۆخی بەڕێوەبەر (Admin Mode)")
 
@@ -93,11 +91,6 @@ else:
       st.sidebar.success("بە سەرکەوتوویی چوویە ژوورەوە وەک ئەدەمین!")
 
       st.sidebar.subheader("➕ زیادکردنی زانیاری بۆ بنکەی زانیاری AI")
-      st.sidebar.info(
-          "💡 هەرچەندە زانیاری لێرە دابنێیت، زیرەکی دەستکرد بە تێگەیشتنی"
-          " زمانی سروشتی دەیانناسێتەوە بێ پێویست بوون بە ناونیشانی ورد."
-      )
-
       with st.sidebar.form("add_knowledge_form"):
         title = st.text_input("ناونیشانی بابەت (ئارەزوومەند):")
         uploaded_file = st.file_uploader(
@@ -179,51 +172,62 @@ else:
     with st.chat_message("assistant"):
       with st.spinner("زیرەکی دەستکرد خەریکی شیکردنەوە و گەڕانە..."):
         custom_data = load_data()
+        response = ""
 
-        # کۆکردنەوەی تەواوی زانیارییەکانی بنکەی زانیاری بۆ ئەوەی AI وەک Context تێیان بگات
-        context_text = ""
-        if custom_data:
+        # ئەگەر لایبرارییەکە هەبوو و API Keyـیش بوونی هەبوو
+        if AI_AVAILABLE and custom_data:
+          context_text = ""
           for idx, item in enumerate(custom_data, 1):
             context_text += (
                 f"\n--- سەرچاوە [{idx}]: {item.get('title')} ---\n"
                 f"{item.get('content')}\n"
             )
 
-        # دروستکردنی پرۆمپتی زیرەک بۆ مۆدێلی AI
-        system_instruction = (
-            "تۆ زیرەکی دەستکردێکی پسپۆڕی. ئەرکی تۆ ئەوەیە کە وەڵامی پرسیاری"
-            " بەکارهێنەر بدەیتەوە تەنها و تەنها لەسەر بنەمای ئەو سەرچاوە و"
-            " زانیارییانەی خوارەوە کە لەلایەن بەڕێوەبەرەوە ئەپلۆد کراون. ئەگەر"
-            " وەڵامەکە لە ناو زانیارییەکاندا نەبوو، بە ڕوونی پێی بڵێ کە لە"
-            " داتاکاندا بوونی نییە، وەڵامەکانت بە زمانی کوردی سۆرانی شیرین"
-            " و پوخت بنووسە.\n\n"
-            f"زانیاری و فایلە ئەپلۆدکراوەکان:\n{context_text}"
-        )
-
-        try:
-          # بەکارهێنانی مۆدێلی گونجاوی Gemini بۆ وەڵامدانەوەی لۆژیکی
-          model = genai.GenerativeModel(
-              model_name="gemini-1.5-flash",
-              system_instruction=system_instruction,
+          system_instruction = (
+              "تۆ زیرەکی دەستکردێکی پسپۆڕی. ئەرکی تۆ ئەوەیە کە وەڵامی پرسیاری"
+              " بەکارهێنەر بدەیتەوە تەنها و تەنها لەسەر بنەمای ئەو سەرچاوە و"
+              " زانیارییانەی خوارەوە کە لەلایەن بەڕێوەبەرەوە ئەپلۆد کراون. ئەگەر"
+              " وەڵامەکە لە ناو زانیارییەکاندا نەبوو، بە ڕوونی پێی بڵێ کە لە"
+              " داتاکاندا بوونی نییە، وەڵامەکانت بە زمانی کوردی سۆرانی پوخت"
+              " بنووسە.\n\n"
+              f"زانیاری و فایلە ئەپلۆدکراوەکان:\n{context_text}"
           )
 
-          # دروستکردنی چاوپێکەوتن یان ناردنی نامەکە
-          chat = model.start_chat(history=[])
-          ai_response = chat.send_message(prompt)
-          response = ai_response.text
-
-        except Exception as e:
-          # فۆڵباک (Fallback) لە حالەتی نەبوونی ئینتەرنێت یان کێشەی API Key
-          if custom_data:
-            response = (
-                "⚠️ (تێبینی: پەیوەندی بە مۆدێلی سەرەکی AIـەوە نەکرا، بەڵام"
-                " ئەمە ناوەڕۆکی فایلەکانتە):\n\n"
-                + custom_data[-1]["content"]
+          try:
+            # ئەگەر مۆدێلەکەی کار پێکرد
+            model = genai.GenerativeModel(
+                model_name="gemini-1.5-flash",
+                system_instruction=system_instruction,
             )
-          else:
+            chat = model.start_chat(history=[])
+            ai_response = chat.send_message(prompt)
+            response = ai_response.text
+          except Exception:
+            response = ""
+
+        # ئەگەر AI بەردەست نەبوو یان API Key نەبوو، گەڕانی زیرەک بەکاربهێنە وەکو فۆڵباک
+        if not response:
+          matched = False
+          if custom_data:
+            prompt_lower = prompt.lower()
+            for item in custom_data:
+              # گەڕانی سادەی ورد لەناو دەقەکاندا بۆ دڵنیابوون لە وەڵام
+              if any(
+                  w in item.get("content", "").lower()
+                  for w in prompt_lower.split()
+                  if len(w) > 2
+              ):
+                response = (
+                    f"📌 **{item.get('title')}**\n\n{item.get('content')}"
+                )
+                matched = True
+                break
+
+          if not matched:
             response = (
-                "سوپاس بۆ پرسیارەکەت. تکایە دڵنیابە لەوەی کە API Key ڕێکخراوە"
-                " یان زانیاریت لە بەشی ئەدەمین زیاد کردووە."
+                "سوپاس بۆ پرسیارەکەت. لەناو داتاکاندا زانیاری پێویست نەدۆزراوەتەوە"
+                " یان پێویستە فایلی `requirements.txt` ڕێکبخەیت بۆ کارپێکردنی"
+                " تەواوی AI."
             )
 
       st.markdown(response)
