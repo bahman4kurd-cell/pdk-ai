@@ -88,23 +88,46 @@ else:
     if admin_pass == "1234":  # لێرە دەتوانیت پاسوۆردی خۆت بگۆڕیت
       st.sidebar.success("بە سەرکەوتوویی چوویە ژوورەوە وەک ئەدەمین!")
 
-      st.sidebar.subheader(
-          "➕ زیادکردنی زانیاری بۆ بنکەی زانیاری PDK AI"
-      )
+      st.sidebar.subheader("➕ زیادکردنی زانیاری یان فایلی نوێ")
       with st.sidebar.form("add_knowledge_form"):
-        title = st.text_input(
-            "عنوان یان بابەتی زانیاریەکە (بۆ نموونە: کۆنگرەی یەکەم):"
-        )
-        content = st.text_area("دەق یان زانیاری ورد لەسەر بابەتەکە:")
-        submitted = st.form_submit_button("زانیاریەکە پاشەکەوت بکە")
+        title = st.text_input("بابەت یان ناوی فای:")
 
-        if submitted and title and content:
+        # بەشی ئەتاچکردنی فایل (بۆ نموونە فایلی دەقی TXT یان زانیاری)
+        uploaded_file = st.file_uploader(
+            "فایل ئەتاچ بکە (TXT)", type=["txt", "md"]
+        )
+
+        content_manual = st.text_area(
+            "یان دەق لێرە بنووسە (ئەگەر فایل نەبوو):"
+        )
+        submitted = st.form_submit_button("پاشەکەوتکردن لە سیستەم")
+
+        if submitted:
           data = load_data()
-          data.append({"title": title, "content": content})
-          save_data(data)
-          st.sidebar.success(
-              "زانیاریەکە بە سەرکەوتوویی زیاد کرا بۆ بنکەی زانیاری!"
-          )
+          final_content = ""
+
+          # ئەگەر ئەدەمین فایل بەتاچ کردبوو، ناوەڕۆکەکەی دەخوێنینەوە
+          if uploaded_file is not None:
+            try:
+              text_data = uploaded_file.read().decode("utf-8")
+              final_content = text_data
+              if not title:
+                title = uploaded_file.name
+            except Exception as e:
+              st.sidebar.error(f"کێشە لە خوێندنەوەی فایلدا هەبوو: {e}")
+          else:
+            final_content = content_manual
+
+          if title and final_content:
+            data.append({"title": title, "content": final_content})
+            save_data(data)
+            st.sidebar.success(
+                "زانیاری یان فایلی ئەتاچکراو بە سەرکەوتوویی پاشەکەوت کرا!"
+            )
+          else:
+            st.sidebar.warning(
+                "تکایە ناونیشانێک و ناوەڕۆکێک یان فایلێک دابین بکە."
+            )
     else:
       st.sidebar.warning("تکایە پاسوۆردی دروست بنووسە.")
 
@@ -150,24 +173,24 @@ else:
     with st.chat_message("user"):
       st.markdown(prompt)
 
-    # وەڵامدانی زیرەکانە و گەڕان لە ناو داتای زیادکراوی ئەدەمین
+    # وەڵامدانی زیرەکانە و گەڕان لە ناو داتای ئەدەمین یان فایلە ئەتاچکراوەکان
     with st.chat_message("assistant"):
       prompt_lower = prompt.lower()
       custom_data = load_data()
 
-      # پشکنین ئایا پرسیارەکە پەیوەندی بەو زانیارییانەوە هەیە کە تۆ وەک ئەدەمین زیادیکردوون
       matched_content = None
       for item in custom_data:
         if (
             item["title"].lower() in prompt_lower
             or prompt_lower in item["title"].lower()
+            or prompt_lower in item["content"].lower()
         ):
           matched_content = item["content"]
           break
 
       if matched_content:
         response = (
-            f"**زانیاری فەرمی لە بنکەی زانیاری ئەدەمینەوە:**\n\n"
+            f"**زانیاری فەرمی لە فایل و بنکەی زانیاری ئەدەمینەوە:**\n\n"
             f"{matched_content}"
         )
       elif "مێژوو" in prompt_lower or "دامەزراندن" in prompt_lower:
