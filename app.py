@@ -90,12 +90,14 @@ else:
 
       st.sidebar.subheader("➕ زیادکردنی زانیاری بۆ بنکەی زانیاری")
       st.sidebar.info(
-          "💡 تێبینی: دەتوانیت دەق یان فایلی نوێ زیاد بکەیت بۆ ئەوەی زیرەکی"
-          " دەستکرد تەنها لە کاتی پێویستدا بەکاریان بهێنێت."
+          "💡 تێبینی: ئەگەر ناوی بابەتت نەنووسین، سیستەمەکە خۆکارانە دەیگجێڕێت"
+          " و دەیبەسێتەوە بە پرسیاری بەکارهێنەرەوە."
       )
 
       with st.sidebar.form("add_knowledge_form"):
-        title = st.text_input("بابەت یان ناوی فایل:")
+        title = st.text_input(
+            "بابەت یان ناوی فایل (ئارەزوومەند - Optional):"
+        )
         uploaded_file = st.file_uploader(
             "فایلی دەقی ئەتاچ بکە (TXT یان MD)", type=["txt", "md"]
         )
@@ -116,14 +118,20 @@ else:
           else:
             final_content = content_manual
 
-          if title and final_content:
+          # ئەگەر ناو نەبوو، یەکەم ڕستەی ناوەڕۆکەکە بکە بە ناونیشان
+          if not title and final_content:
+            title = (
+                final_content.split("\n")[0][:30] + "..."
+                if len(final_content) > 30
+                else final_content
+            )
+
+          if final_content:
             data.append({"title": title, "content": final_content})
             save_data(data)
-            st.sidebar.success("بابەتەکە بە سەرکەوتوویی پاشەکەوت کرا!")
+            st.sidebar.success("زانیارییەکان بە سەرکەوتوویی پاشەکەوت کران!")
           else:
-            st.sidebar.warning(
-                "تکایە ناونیشانێک و ناوەڕۆکێک یان فایلێک دابین بکە."
-            )
+            st.sidebar.warning("تکایە ناوەڕۆکێک یان فایلێک دابین بکە.")
     else:
       st.sidebar.warning("تکایە پاسوۆردی دروست بنووسە.")
 
@@ -170,55 +178,53 @@ else:
       prompt_lower = prompt.lower()
       custom_data = load_data()
 
-      # پەرەپێدانی میکانیزمی فلتەرکردنی زیرەک (Smart Search / Retrieval)
-      # بۆ ئەوەی تەنها بەشە پەیوەندیدارەکان بهێنێت نەک هەموو داتاکان بەیەکەوە
-      matched_contents = []
+      # پەرەپێدانی گەڕانی زیرەک (Semantic Keyword Matching لە ناوەڕۆکدا)
+      scored_matches = []
 
-      # دابەشکردنی پرسیارەکە بۆ چەند وشەیەکی سەرەکی (Keywords)
+      # جیاکردنەوەی وشە سەرەکییەکانی پرسیارەکە (فلتەرکردنی پیتە کورتەکان)
       query_words = [
-          w.strip()
-          for w in prompt_lower.split()
-          if len(w.strip()) > 2
-      ]  # فلتەرکردنی وشە کورتبووەکان
+          w.strip() for w in prompt_lower.split() if len(w.strip()) > 1
+      ]
 
       for item in custom_data:
         title = item.get("title", "")
         content = item.get("content", "")
-        title_lower = title.lower()
         content_lower = content.lower()
+        title_lower = title.lower()
 
-        # پشکنینی ئەوەی ئایا ناونیشانی بابەتەکە یان بەشێک لە پرسیارەکە لەناو ناوەڕۆکەکەدا هەیە
-        score = 0
-        if title_lower in prompt_lower or prompt_lower in title_lower:
-          score += 10
+        match_score = 0
 
+        # پشکنینی وشەکان لەناو ناوەڕۆکەکەدا (Body Content)
         for word in query_words:
           if word in content_lower:
-            score += 2  # پێدانی خاڵ بۆ هەر وشەیەکی هاوتا لە ناوەڕۆکدا
+            match_score += (
+                3  # پێدانی کێش (Weight) بەهێزتر بە بوونی وشەکان لە ناوەڕۆکدا
+            )
 
-        # ئەگەر ڕێژەی هاوتایی گونجاو بوو، تەنها ئەم بەشە دەستنیشان بکە
-        if score > 0:
-          matched_contents.append({
+        # پشکنین لە ناونیشانیشدا
+        for word in query_words:
+          if word in title_lower:
+            match_score += 5
+
+        if match_score > 0:
+          scored_matches.append({
               "title": title,
               "content": content,
-              "score": score,
+              "score": match_score,
           })
 
-      # ڕیزکردنی ئەنجامەکان بەپێی باشترین هاوتایی (Relevance Ranking)
-      matched_contents = sorted(
-          matched_contents, key=lambda x: x["score"], reverse=True
+      # ڕیزکردنی ئەنجامەکان بەپێی زۆرترین خاڵی هاوتایی
+      scored_matches = sorted(
+          scored_matches, key=lambda x: x["score"], reverse=True
       )
 
-      # دروستکردنی وەڵامی زیرەکانە وەک LLM (تەنها هێنانی زانیاری پەیوەندیدار)
-      if matched_contents:
-        # تەنها باشترین ئەنجام یان دوو ئەنجامی یەکەم دەهێنێت کە زۆرترین پەیوەندییان هەیە
-        best_match = matched_contents[0]
-        response = (
-            f"📌 **لەبارەی ({best_match['title']}):**\n\n"
-            f"{best_match['content']}"
-        )
+      # دروستکردنی وەڵامی زیرەکانە
+      if scored_matches:
+        # تەنها باشترین و پەیوەندیدارترین ناوەڕۆک دەهێنێت
+        best_match = scored_matches[0]
+        response = f"📌 **{best_match['title']}**\n\n{best_match['content']}"
       else:
-        # وەڵامی بنەڕەتی ئەگەر لە زانیارییە تایبەتەکاندا نەبوو
+        # پشکنینی بنەڕەتی بۆ وەڵامە ئاساییەکان
         if "مێژوو" in prompt_lower or "دامەزراندن" in prompt_lower:
           response = (
               "پارتی دیموکراتی کوردستان لە 16ـی ئابی 1946 بە سەرۆکایەتی نەمر مەلا"
@@ -233,10 +239,9 @@ else:
           )
         else:
           response = (
-              f"سوپاس بۆ پرسیارەکەت. لەناو ئەو زانیاری و فایلانەی کە تۆمار"
-              f" کراون، هیچ زانیارییەکی ڕاستەوخۆ دەربارەی ({prompt}) نەدۆزراوەتەوە."
-              " دەتوانیت پرسیارەکەت بە شێوازێکی تر بپرسیت یان لە بەشی ئەدەمین"
-              " زانیاری زیاتر زیاد بکەیت."
+              f"سوپاس بۆ پرسیارەکەت. لەناو ئەو زانیارییانەی کە تۆمار"
+              f" کراون، هیچ زانیارییەک نەدۆزراوەتەوە کە هاوتا بێت لەگەڵ"
+              f" ({prompt})."
           )
 
       st.markdown(response)
