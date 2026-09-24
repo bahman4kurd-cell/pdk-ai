@@ -184,32 +184,28 @@ else:
     with st.chat_message("user"):
       st.markdown(prompt)
 
-    # وەڵامدانی زیرەکانە و گەڕانی پێشکەوتوو لە ناو ناوەڕۆکی فایلە PDFـەکاندا
+    # وەڵامدانی زیرەکانە و گەڕانی پێشکەوتوو و کراوە لە ناو ناوەڕۆکی فایلەکاندا
     with st.chat_message("assistant"):
       prompt_lower = prompt.lower()
       custom_data = load_data()
 
       matched_contents = []
 
-      # پشکنینی وشە بە وشە لەناو هەموو فایل و بابەتە پاشەکەوتکراوەکاندا
+      # گەڕانی گشتگیر بەبێ مەرجی درێژی وشەکان (بۆ ئەوەی ژمارە و پیتە کورتەکانیش بگرێتەوە)
+      keywords = [kw for kw in prompt_lower.split()]
+
       for item in custom_data:
         title_lower = item.get("title", "").lower()
         content_lower = item.get("content", "").lower()
 
-        # دابەشکردنی پرسیارەکە بۆ چەند وشەیەکی بچووک تاوەکو ئەگەر وشەیەکیشی تێدا بوو بدۆزرێتەوە
-        keywords = [
-            kw for kw in prompt_lower.split() if len(kw) > 2
-        ]  # تەنها وشە گەورەکان
-
         found = False
-        # پشکنین ئایا ناونیشان یان ناوەڕۆکی فایلەکە وشەکان لەخۆ دەگرێت
-        if title_lower in prompt_lower or prompt_lower in title_lower:
+        # پشکنین ئەگەر بەشێک لە ناونیشان یان ناوەڕۆک لە پرسیارەکەدا هەبێت، یان بەپێچەوانەوە
+        if (
+            any(kw in content_lower for kw in keywords if len(kw) > 1)
+            or title_lower in prompt_lower
+            or prompt_lower in title_lower
+        ):
           found = True
-        else:
-          for kw in keywords:
-            if kw in content_lower:
-              found = True
-              break
 
         if found:
           matched_contents.append(
@@ -217,10 +213,9 @@ else:
           )
 
       if matched_contents:
-        # ئەگەر زانیاری لە فایلەکاندا دۆزرایەوە
         response = (
-            "**دۆزرایەوە لە بنکەی زانیاری و فایلە ئەتاچکراوەکانی"
-            f" ئەدەمین:**\n\n{'\n\n---\n\n'.join(matched_contents)}"
+            "**زانیاری دۆزراوە لە بنکەی زانیاری و فایلە"
+            f" ئەتاچکراوەکانەوە:**\n\n{'\n\n---\n\n'.join(matched_contents)}"
         )
       elif "مێژوو" in prompt_lower or "دامەزراندن" in prompt_lower:
         response = (
@@ -235,12 +230,23 @@ else:
             " سازمانداییەکان."
         )
       else:
-        response = (
-            f"سوپاس بۆ پرسیارەکەت دەربارەی ({prompt}). من وەک PDK AI"
-            " دەتوانم وەڵام بدەم، تکایە دڵنیابە لەوەی زانیارییەکە لە بەشی"
-            " ئەدەمین ئەتاچ کرابێت یان پرسیارەکەت لەسەر بنەمای"
-            " بابەتەکانبێت."
-        )
+        # ئەگەر هیچیش نەدۆزرایەوە، بۆ ئەوەی دڵنیا ببی لەوەی فایلەکان هەن، هەموو ناوەڕۆکی فایلی ئەتاچکراو نیشان دەدات
+        if custom_data:
+          all_files_summary = []
+          for item in custom_data:
+            all_files_summary.append(
+                f"📁 **{item.get('title')}**:\n{item.get('content')}"
+            )
+          response = (
+              "من گەڕام، بەڵام هاوتایەکی تەواوم بۆ پرسیارەکەت نەتۆمارکرد."
+              " بەڵام ئەمانە ئەو فایل و زانیاریانەن کە ئێستا لە سیستەمەکەدا"
+              f" هەن:\n\n{'\n\n'.join(all_files_summary)}"
+          )
+        else:
+          response = (
+              f"سوپاس بۆ پرسیارەکەت دەربارەی ({prompt}). هیچ فایل یان زانیارییەک"
+              " تا ئێستا لە بەشی ئەدەمین ئەتاچ نەکراوە."
+          )
 
       st.markdown(response)
       st.session_state.messages.append(
